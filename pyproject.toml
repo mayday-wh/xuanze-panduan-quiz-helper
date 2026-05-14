@@ -1,0 +1,13 @@
+[project]
+name = "xuanze-panduan-quiz-helper"
+version = "1.2.0"
+description = "选择判断刷题助手"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "openpyxl>=3.1.0",
+    "pandas>=2.2.0",
+]
+
+[tool.uv]
+package = false
