@@ -12,7 +12,7 @@ import json
 import sys
 
 CONFIG_FILE = "study_progress.json"
-APP_VERSION = "1.2"
+APP_VERSION = "1.3"
 
 def get_app_dir():
     if getattr(sys, "frozen", False):
@@ -179,7 +179,7 @@ class RoundedButton(tk.Canvas):
         is_disabled = self._state == "disabled"
         fill = self._active_bg if self._hover and not is_disabled else self._bg
         fg = self._disabled_fg if is_disabled else (self._active_fg if self._hover else self._fg)
-        radius = self._corner_radius or max(sx(4), min(sx(10), height_px // 3, int(width_px * 0.04)))
+        radius = self._corner_radius or max(sx(8), min(sx(16), height_px // 2 - 1, int(width_px * 0.06)))
         self._rounded_rect(0, 0, width_px, height_px, radius, fill=fill, outline=fill)
         if self._anchor == "w":
             text_x = self._padx + sx(8)
@@ -258,6 +258,238 @@ class RoundedButton(tk.Canvas):
             return self._state
         return super().cget(key)
 
+class RoundedOption(tk.Canvas):
+    def __init__(
+        self,
+        parent,
+        text="",
+        font=FONT_BODY,
+        bg=COLORS["option_bg"],
+        fg=COLORS["text"],
+        padx=None,
+        pady=None,
+        wraplength=None,
+        justify="left",
+        anchor="w",
+        highlightbackground=COLORS["border"],
+        corner_radius=None,
+        **kwargs,
+    ):
+        self._parent_bg = parent.cget("bg") if "bg" in parent.keys() else COLORS["app_bg"]
+        super().__init__(
+            parent,
+            bg=self._parent_bg,
+            highlightthickness=0,
+            bd=0,
+            relief="flat",
+            cursor=kwargs.pop("cursor", "hand2"),
+        )
+        self._text = text
+        self._font = font
+        self._bg = bg
+        self._fg = fg
+        self._padx = sx(14) if padx is None else padx
+        self._pady = sx(8) if pady is None else pady
+        self._wraplength = wraplength
+        self._justify = justify
+        self._anchor = anchor
+        self._border = highlightbackground
+        self._state = kwargs.pop("state", "normal")
+        self._corner_radius = corner_radius or sx(12)
+        self._drawing = False
+
+        self.config(height=self._preferred_height())
+        self.bind("<Configure>", lambda _event: self._draw())
+        self._draw()
+
+    def _rounded_rect(self, x1, y1, x2, y2, radius, **kwargs):
+        radius = min(radius, int((x2 - x1) / 2), int((y2 - y1) / 2))
+        self.create_rectangle(x1 + radius, y1, x2 - radius, y2, **kwargs)
+        self.create_rectangle(x1, y1 + radius, x2, y2 - radius, **kwargs)
+        self.create_arc(x1, y1, x1 + radius * 2, y1 + radius * 2, start=90, extent=90, style="pieslice", **kwargs)
+        self.create_arc(x2 - radius * 2, y1, x2, y1 + radius * 2, start=0, extent=90, style="pieslice", **kwargs)
+        self.create_arc(x2 - radius * 2, y2 - radius * 2, x2, y2, start=270, extent=90, style="pieslice", **kwargs)
+        self.create_arc(x1, y2 - radius * 2, x1 + radius * 2, y2, start=180, extent=90, style="pieslice", **kwargs)
+
+    def _preferred_height(self):
+        font_obj = tkfont.Font(font=self._font)
+        return max(sx(42), font_obj.metrics("linespace") + self._pady * 2 + sx(4))
+
+    def _draw(self):
+        if self._drawing:
+            return
+        self._drawing = True
+        try:
+            self.delete("all")
+            width_px = max(1, self.winfo_width())
+            height_px = max(self._preferred_height(), self.winfo_height())
+            radius = min(self._corner_radius, height_px // 3)
+            self._rounded_rect(1, 1, width_px - 2, height_px - 2, radius, fill=self._border, outline=self._border)
+            self._rounded_rect(2, 2, width_px - 3, height_px - 3, max(1, radius - 1), fill=self._bg, outline=self._bg)
+
+            text_width = max(1, width_px - self._padx * 2)
+            if self._wraplength:
+                text_width = min(text_width, self._wraplength)
+            text_id = self.create_text(
+                self._padx,
+                self._pady,
+                text=self._text,
+                font=self._font,
+                fill=self._fg,
+                anchor="nw",
+                width=text_width,
+                justify=self._justify,
+            )
+            bbox = self.bbox(text_id)
+            if bbox:
+                needed_height = max(self._preferred_height(), bbox[3] + self._pady)
+                configured_height = int(float(super().cget("height")))
+                if abs(needed_height - configured_height) > 1:
+                    super().config(height=needed_height)
+                    return
+        finally:
+            self._drawing = False
+
+    def configure(self, cnf=None, **kwargs):
+        options = {}
+        if cnf:
+            options.update(cnf)
+        options.update(kwargs)
+        passthrough = {}
+        for key, value in options.items():
+            if key == "text":
+                self._text = value
+            elif key == "font":
+                self._font = value
+            elif key == "bg":
+                self._bg = value
+            elif key == "fg":
+                self._fg = value
+            elif key == "padx":
+                self._padx = value
+            elif key == "pady":
+                self._pady = value
+            elif key == "wraplength":
+                self._wraplength = value
+            elif key == "justify":
+                self._justify = value
+            elif key == "anchor":
+                self._anchor = value
+            elif key == "highlightbackground":
+                self._border = value
+            elif key == "corner_radius":
+                self._corner_radius = value
+            elif key == "state":
+                self._state = value
+                passthrough["cursor"] = "arrow" if value == "disabled" else "hand2"
+            elif key in {"relief", "highlightthickness", "borderwidth"}:
+                continue
+            else:
+                passthrough[key] = value
+        if passthrough:
+            super().config(**passthrough)
+        self._draw()
+
+    config = configure
+
+    def cget(self, key):
+        if key == "text":
+            return self._text
+        if key == "state":
+            return self._state
+        return super().cget(key)
+
+class RoundedEntry(tk.Canvas):
+    def __init__(
+        self,
+        parent,
+        width=7,
+        font=FONT_NORMAL,
+        bg=COLORS["sidebar_alt"],
+        fg=COLORS["text"],
+        border=COLORS["border"],
+        justify="center",
+        padx=None,
+        pady=None,
+        corner_radius=None,
+        **kwargs,
+    ):
+        self._parent_bg = parent.cget("bg") if "bg" in parent.keys() else COLORS["app_bg"]
+        self._font = font
+        self._bg = bg
+        self._border = border
+        self._padx = sx(8) if padx is None else padx
+        self._pady = sx(4) if pady is None else pady
+        self._corner_radius = corner_radius or sx(12)
+
+        font_obj = tkfont.Font(font=self._font)
+        self._width_px = max(sx(58), font_obj.measure("0") * width + self._padx * 2)
+        self._height_px = max(sx(34), font_obj.metrics("linespace") + self._pady * 2)
+
+        super().__init__(
+            parent,
+            width=self._width_px,
+            height=self._height_px,
+            bg=self._parent_bg,
+            highlightthickness=0,
+            bd=0,
+            relief="flat",
+            cursor=kwargs.pop("cursor", "xterm"),
+        )
+
+        self.entry = tk.Entry(
+            self,
+            width=width,
+            font=font,
+            bg=bg,
+            fg=fg,
+            relief="flat",
+            borderwidth=0,
+            justify=justify,
+            insertbackground=fg,
+        )
+        self._entry_window = self.create_window(
+            self._width_px / 2,
+            self._height_px / 2,
+            width=self._width_px - self._padx * 2,
+            height=self._height_px - self._pady,
+            window=self.entry,
+        )
+
+        self.bind("<Configure>", lambda _event: self._draw())
+        self.bind("<Button-1>", lambda _event: self.entry.focus_set())
+        self._draw()
+
+    def _rounded_rect(self, x1, y1, x2, y2, radius, **kwargs):
+        radius = min(radius, int((x2 - x1) / 2), int((y2 - y1) / 2))
+        self.create_rectangle(x1 + radius, y1, x2 - radius, y2, **kwargs)
+        self.create_rectangle(x1, y1 + radius, x2, y2 - radius, **kwargs)
+        self.create_arc(x1, y1, x1 + radius * 2, y1 + radius * 2, start=90, extent=90, style="pieslice", **kwargs)
+        self.create_arc(x2 - radius * 2, y1, x2, y1 + radius * 2, start=0, extent=90, style="pieslice", **kwargs)
+        self.create_arc(x2 - radius * 2, y2 - radius * 2, x2, y2, start=270, extent=90, style="pieslice", **kwargs)
+        self.create_arc(x1, y2 - radius * 2, x1 + radius * 2, y2, start=180, extent=90, style="pieslice", **kwargs)
+
+    def _draw(self):
+        super().delete("shape")
+        width_px = max(1, self.winfo_width())
+        height_px = max(1, self.winfo_height())
+        radius = min(self._corner_radius, height_px // 3)
+        self._rounded_rect(1, 1, width_px - 2, height_px - 2, radius, fill=self._border, outline=self._border, tags="shape")
+        self._rounded_rect(2, 2, width_px - 3, height_px - 3, max(1, radius - 1), fill=self._bg, outline=self._bg, tags="shape")
+        self.coords(self._entry_window, width_px / 2, height_px / 2)
+        self.itemconfig(self._entry_window, width=max(1, width_px - self._padx * 2), height=max(1, height_px - self._pady))
+        self.tag_lower("shape")
+
+    def get(self):
+        return self.entry.get()
+
+    def delete(self, first, last=None):
+        self.entry.delete(first, last)
+
+    def bind(self, sequence=None, func=None, add=None):
+        self.entry.bind(sequence, func, add)
+        return super().bind(sequence, func, add)
+
 class QuizApp:
     def __init__(self, root):
         self.root = root
@@ -271,6 +503,7 @@ class QuizApp:
         self.current_file = ""
         self.selected_indices = []
         self.ans = ""
+        self.review_mode_var = tk.BooleanVar(value=False)
         self.auto_submit_var = tk.BooleanVar(value=False)
         
         self.ensure_quiz_dir()
@@ -327,6 +560,25 @@ class QuizApp:
     def normalize_row_for_compare(self, df):
         return df.fillna("").astype(str).apply(lambda col: col.str.strip())
 
+    def is_header_row(self, row):
+        headers = [
+            {"题目", "题干", "question"},
+            {"选项", "options", "option"},
+            {"答案", "正确答案", "answer"},
+        ]
+        values = [str(row[i]).strip().lower() for i in range(REQUIRED_COLUMNS)]
+        return all(value in valid_headers for value, valid_headers in zip(values, headers))
+
+    def strip_option_prefix(self, text):
+        return re.sub(r'^[A-H]\s*[、\.:：]\s*', '', str(text).strip())
+
+    def parse_choice_options(self, opts_raw):
+        options = re.split(r'\s*[A-H][、\.:：]\s*', opts_raw)
+        options = [p.strip() for p in options if p.strip()]
+        if options:
+            return options
+        return [option for part in opts_raw.split() if (option := self.strip_option_prefix(part))]
+
     def validate_quiz_data(self, df, filename):
         if df.empty:
             raise ValueError("题库为空。")
@@ -334,6 +586,8 @@ class QuizApp:
             raise ValueError("题库至少需要 3 列：题干、选项、答案。")
 
         df = df.dropna(how="all").reset_index(drop=True)
+        if not df.empty and self.is_header_row(df.iloc[0]):
+            df = df.iloc[1:].reset_index(drop=True)
         if df.empty:
             raise ValueError("题库没有有效题目。")
 
@@ -405,6 +659,32 @@ class QuizApp:
         if correct_idx is not None and correct_idx < len(self.opt_widgets):
             self.opt_widgets[correct_idx].config(bg=COLORS["success_soft"], highlightbackground=COLORS["success"])
 
+    def reveal_correct_answer(self):
+        if self.is_pd:
+            correct_indices = [0 if self.ans == "对" else 1]
+        else:
+            correct_indices = [
+                ord(answer) - ord("A")
+                for answer in self.clean_choice_answer(self.ans)
+                if "A" <= answer <= "H"
+            ]
+
+        for idx in correct_indices:
+            if idx < len(self.opt_widgets):
+                self.opt_widgets[idx].config(bg=COLORS["success_soft"], highlightbackground=COLORS["success"])
+
+    def on_review_mode_changed(self):
+        if self.review_mode_var.get():
+            self.auto_submit_var.set(False)
+        if self.current_df is not None:
+            self.show_question()
+
+    def on_auto_submit_changed(self):
+        if self.auto_submit_var.get() and self.review_mode_var.get():
+            self.review_mode_var.set(False)
+            if self.current_df is not None:
+                self.show_question()
+
     def on_file_list_mousewheel(self, event):
         self.file_list_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
         return "break"
@@ -426,10 +706,14 @@ class QuizApp:
             )
 
     def on_option_enter(self, idx):
+        if self.review_mode_var.get():
+            return
         if idx not in self.selected_indices:
             self.set_option_style(idx, hover=True)
 
     def on_option_leave(self, idx):
+        if self.review_mode_var.get():
+            return
         self.set_option_style(idx, selected=idx in self.selected_indices)
 
     def setup_ui(self):
@@ -517,17 +801,17 @@ class QuizApp:
             fg=COLORS["muted"],
         ).pack(side="left")
         
-        self.jump_entry = tk.Entry(
+        self.jump_entry = RoundedEntry(
             self.jump_frame,
             width=7,
             font=FONT_NORMAL,
             bg=COLORS["sidebar_alt"],
             fg=COLORS["text"],
-            relief="solid",
-            borderwidth=1,
+            border=COLORS["border"],
             justify="center",
+            corner_radius=sx(12),
         )
-        self.jump_entry.pack(side="left", padx=(sx(8), 0), ipady=sx(1))
+        self.jump_entry.pack(side="left", padx=(sx(8), 0))
         self.jump_entry.bind("<Return>", self.jump_to_question)
 
         # 动态错题集管理按钮
@@ -550,6 +834,7 @@ class QuizApp:
             self.auto_submit_frame,
             text="",
             variable=self.auto_submit_var,
+            command=self.on_auto_submit_changed,
             font=FONT_SMALL,
             bg=COLORS["top_header"],
             fg=COLORS["text"],
@@ -561,6 +846,34 @@ class QuizApp:
             borderwidth=0,
         )
         self.auto_submit_check.pack(side="left", padx=(sx(4), 0), pady=0)
+
+        self.review_mode_frame = tk.Frame(self.top_bar, bg=COLORS["top_header"])
+        self.review_mode_frame.pack(side="right", padx=(0, sx(12)), pady=0)
+
+        tk.Label(
+            self.review_mode_frame,
+            text="背题功能",
+            font=FONT_SMALL,
+            bg=COLORS["top_header"],
+            fg=COLORS["text"],
+        ).pack(side="left")
+
+        self.review_mode_check = tk.Checkbutton(
+            self.review_mode_frame,
+            text="",
+            variable=self.review_mode_var,
+            command=self.on_review_mode_changed,
+            font=FONT_SMALL,
+            bg=COLORS["top_header"],
+            fg=COLORS["text"],
+            activebackground=COLORS["top_header"],
+            activeforeground=COLORS["text"],
+            selectcolor=COLORS["surface"],
+            cursor="hand2",
+            relief="flat",
+            borderwidth=0,
+        )
+        self.review_mode_check.pack(side="left", padx=(sx(4), 0), pady=0)
 
         # 题干显示
         self.question_frame = tk.Frame(self.right_frame, bg=COLORS["app_bg"])
@@ -586,7 +899,7 @@ class QuizApp:
         
         self.opt_widgets = []
         for i in range(8):
-            l = tk.Label(
+            l = RoundedOption(
                 self.opt_frame,
                 text="",
                 font=FONT_BODY,
@@ -601,6 +914,7 @@ class QuizApp:
                 cursor="hand2",
                 highlightthickness=1,
                 highlightbackground=COLORS["border"],
+                corner_radius=sx(12),
             )
             l.bind("<Button-1>", lambda e, idx=i: self.on_click_option(idx))
             l.bind("<Enter>", lambda e, idx=i: self.on_option_enter(idx))
@@ -629,14 +943,16 @@ class QuizApp:
         self.bottom_frame.grid_columnconfigure(1, weight=1)
         self.bottom_frame.grid_columnconfigure(2, weight=1)
 
-        self.btn_prev = self.make_button(self.bottom_frame, "◀ 上一题", self.prev_question, "secondary")
+        self.btn_prev = self.make_button(self.bottom_frame, "上一题", self.prev_question, "secondary")
+        self.btn_prev.config(pady=sx(7))
         self.btn_prev.grid(row=0, column=0, padx=sx(58), pady=sx(5))
         
         self.btn_submit = self.make_button(self.bottom_frame, "确认提交", self.submit_answer, "disabled")
-        self.btn_submit.config(state="disabled")
+        self.btn_submit.config(state="disabled", pady=sx(7))
         self.btn_submit.grid(row=0, column=1, padx=sx(58), pady=sx(5))
         
-        self.btn_next = self.make_button(self.bottom_frame, "下一题 ▶", self.next_question, "secondary")
+        self.btn_next = self.make_button(self.bottom_frame, "下一题", self.next_question, "secondary")
+        self.btn_next.config(pady=sx(7))
         self.btn_next.grid(row=0, column=2, padx=sx(58), pady=sx(5))
 
     def refresh_file_list(self):
@@ -653,7 +969,7 @@ class QuizApp:
             self.show_error("读取题库目录失败", f"无法读取题库目录：\n{QUIZ_DIR}\n\n{exc}")
             return
         
-        for f in files:
+        for index, f in enumerate(files):
             display_name = os.path.splitext(f)[0]
             button = RoundedButton(
                 self.file_listbox,
@@ -670,7 +986,7 @@ class QuizApp:
                 pady=sx(4),
                 anchor="w",
             )
-            button.pack(fill="x", pady=(0, sx(6)))
+            button.pack(fill="x", pady=(sx(8) if index == 0 else 0, sx(6)))
             button.bind("<MouseWheel>", self.on_file_list_mousewheel)
             self.file_buttons.append(button)
             if self.current_file == f:
@@ -766,22 +1082,25 @@ class QuizApp:
         if self.is_pd:
             options = ["对", "错"]  
         else:
-            options = re.split(r'\s*[A-H][、\.]\s*', opts_raw)
-            options = [p.strip() for p in options if p.strip()]
-            if not options: options = opts_raw.split()
+            options = self.parse_choice_options(opts_raw)
 
         for i, widget in enumerate(self.opt_widgets):
             if i < len(options):
                 if self.is_pd:
                     text_display = options[i] 
                 else:
-                    text_display = f"{chr(65+i)}. {options[i]}" 
+                    text_display = f"{chr(65+i)}. {self.strip_option_prefix(options[i])}" 
                 widget.config(text=text_display, state="normal")
                 widget.pack(pady=sx(4), fill="x")
             else: 
                 widget.pack_forget()
 
+        if self.review_mode_var.get():
+            self.reveal_correct_answer()
+
     def on_click_option(self, idx):
+        if self.review_mode_var.get():
+            return
         if self.is_multi:
             if idx in self.selected_indices:
                 self.selected_indices.remove(idx)
