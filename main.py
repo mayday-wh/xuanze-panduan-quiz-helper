@@ -10,9 +10,10 @@ import re
 import os
 import json
 import sys
+import random
 
 CONFIG_FILE = "study_progress.json"
-APP_VERSION = "1.3"
+APP_VERSION = "2.0"
 
 def get_app_dir():
     if getattr(sys, "frozen", False):
@@ -23,6 +24,7 @@ BASE_DIR = get_app_dir()
 CONFIG_PATH = os.path.join(BASE_DIR, CONFIG_FILE)
 QUIZ_DIR = os.path.join(BASE_DIR, "题库")
 REQUIRED_COLUMNS = 3
+ANALYSIS_COLUMN = 3
 
 FONT_FAMILY = "Microsoft YaHei UI"
 FONT_SMALL = (FONT_FAMILY, 10)
@@ -32,7 +34,7 @@ FONT_BODY = (FONT_FAMILY, 11)
 FONT_BODY_BOLD = (FONT_FAMILY, 11, "bold")
 FONT_BUTTON = (FONT_FAMILY, 11, "bold")
 
-COLORS = {
+DEFAULT_COLORS = {
     "app_bg": "#fbf6ee",
     "surface": "#fffaf2",
     "sidebar": "#f3e4d2",
@@ -59,14 +61,97 @@ COLORS = {
     "option_hover": "#f7eadb",
 }
 
+EYE_COLORS = {
+    "app_bg": "#eef6e8",
+    "surface": "#fbfff7",
+    "sidebar": "#dcebd0",
+    "sidebar_alt": "#f5fbef",
+    "sidebar_header": "#d8e8c6",
+    "top_header": "#dcebd0",
+    "border": "#c5d4b6",
+    "text": "#2f372d",
+    "muted": "#68765c",
+    "primary": "#617b4d",
+    "primary_hover": "#4f673d",
+    "primary_soft": "#dcebcf",
+    "file_item": "#f8fff2",
+    "file_item_hover": "#e8f3dd",
+    "file_item_selected": "#617b4d",
+    "success": "#4f7b45",
+    "success_soft": "#dff0d7",
+    "warning": "#7a683a",
+    "warning_soft": "#edf2d5",
+    "danger": "#9b554f",
+    "danger_soft": "#f2ddd9",
+    "disabled": "#b3c2a4",
+    "option_bg": "#fbfff7",
+    "option_hover": "#eef8e7",
+}
+
+NIGHT_COLORS = {
+    "app_bg": "#15181b",
+    "surface": "#22272b",
+    "sidebar": "#1b1f23",
+    "sidebar_alt": "#1c2025",
+    "sidebar_header": "#20252a",
+    "top_header": "#1f2328",
+    "border": "#3a4148",
+    "text": "#e3e0d8",
+    "muted": "#b7b0a5",
+    "primary": "#d4ae70",
+    "primary_hover": "#c79f5e",
+    "primary_soft": "#2a3035",
+    "file_item": "#22272b",
+    "file_item_hover": "#2a3035",
+    "file_item_selected": "#d4ae70",
+    "success": "#7fb071",
+    "success_soft": "#26382c",
+    "warning": "#d4ae70",
+    "warning_soft": "#2f2a22",
+    "danger": "#d17c72",
+    "danger_soft": "#3b2828",
+    "disabled": "#444b55",
+    "option_bg": "#22272b",
+    "option_hover": "#2a3035",
+}
+
+COLOR_THEMES = {
+    "default": DEFAULT_COLORS,
+    "eye": EYE_COLORS,
+    "night": NIGHT_COLORS,
+}
+COLORS = DEFAULT_COLORS.copy()
+
+def set_color_theme(theme_name):
+    COLORS.clear()
+    COLORS.update(COLOR_THEMES.get(theme_name, DEFAULT_COLORS))
+
+def keep_cjk_inline_spacing(text):
+    text = str(text)
+    text = re.sub(r'(?<=[\u4e00-\u9fff]) (?=[A-Za-z0-9])', '\u00a0', text)
+    text = re.sub(r'(?<=[A-Za-z0-9]) (?=[\u4e00-\u9fff])', '\u00a0', text)
+    text = re.sub(r'（ +）', lambda match: '（\u2060' + ('\u00a0' * (len(match.group(0)) - 2)) + '\u2060）', text)
+    text = re.sub(r'\( +\)', lambda match: '(\u2060' + ('\u00a0' * (len(match.group(0)) - 2)) + '\u2060)', text)
+    return text
+
 BUTTON_WIDTH = 10
 BUTTON_HEIGHT = 1
 HEADER_HEIGHT = 100
+PAGE_PADX = 48
+TOOLBAR_PADX = 28
+GROUP_GAP = 14
+SECTION_GAP = 10
+CONTROL_RADIUS = 12
+CARD_RADIUS = 14
+BUTTON_PADY = 7
+MODE_BUTTON_WIDTH = 7
+QUESTION_WRAP = 1280
+OPTION_WRAP = 1260
 BASE_SCREEN_WIDTH = 3840
 BASE_SCREEN_HEIGHT = 2160
-BASE_WINDOW_WIDTH = 1800
-BASE_WINDOW_HEIGHT = 900
-BASE_MIN_WIDTH = 1536
+BASE_WINDOW_WIDTH = 1500
+BASE_WINDOW_HEIGHT = 960
+BASE_MIN_WIDTH = 1180
 BASE_MIN_HEIGHT = 832
 BASE_TK_SCALING = 1.3333333333333333
 UI_SCALE = 1.0
@@ -295,7 +380,7 @@ class RoundedOption(tk.Canvas):
         self._anchor = anchor
         self._border = highlightbackground
         self._state = kwargs.pop("state", "normal")
-        self._corner_radius = corner_radius or sx(12)
+        self._corner_radius = corner_radius or sx(CONTROL_RADIUS)
         self._drawing = False
 
         self.config(height=self._preferred_height())
@@ -328,12 +413,10 @@ class RoundedOption(tk.Canvas):
             self._rounded_rect(2, 2, width_px - 3, height_px - 3, max(1, radius - 1), fill=self._bg, outline=self._bg)
 
             text_width = max(1, width_px - self._padx * 2)
-            if self._wraplength:
-                text_width = min(text_width, self._wraplength)
             text_id = self.create_text(
                 self._padx,
                 self._pady,
-                text=self._text,
+                text=keep_cjk_inline_spacing(self._text),
                 font=self._font,
                 fill=self._fg,
                 anchor="nw",
@@ -420,7 +503,7 @@ class RoundedEntry(tk.Canvas):
         self._border = border
         self._padx = sx(8) if padx is None else padx
         self._pady = sx(4) if pady is None else pady
-        self._corner_radius = corner_radius or sx(12)
+        self._corner_radius = corner_radius or sx(CARD_RADIUS)
 
         font_obj = tkfont.Font(font=self._font)
         self._width_px = max(sx(58), font_obj.measure("0") * width + self._padx * 2)
@@ -490,6 +573,212 @@ class RoundedEntry(tk.Canvas):
         self.entry.bind(sequence, func, add)
         return super().bind(sequence, func, add)
 
+class RoundedDropdown(tk.Canvas):
+    def __init__(
+        self,
+        parent,
+        variable,
+        values=None,
+        command=None,
+        font=FONT_NORMAL,
+        width=24,
+        bg=COLORS["surface"],
+        fg=COLORS["text"],
+        border=COLORS["border"],
+        activebackground=COLORS["option_hover"],
+        corner_radius=None,
+        padx=None,
+        pady=None,
+        **kwargs,
+    ):
+        self._parent_bg = parent.cget("bg") if "bg" in parent.keys() else COLORS["app_bg"]
+        self._variable = variable
+        self._values = values or []
+        self._command = command
+        self._font = font
+        self._bg = bg
+        self._fg = fg
+        self._border = border
+        self._active_bg = activebackground
+        self._corner_radius = corner_radius or sx(CONTROL_RADIUS)
+        self._padx = sx(14) if padx is None else padx
+        self._pady = sx(5) if pady is None else pady
+        self._hover = False
+
+        font_obj = tkfont.Font(font=self._font)
+        text_width = font_obj.measure("0") * width
+        height = max(sx(36), font_obj.metrics("linespace") + self._pady * 2 + sx(6))
+        super().__init__(
+            parent,
+            width=max(sx(220), text_width + self._padx * 2 + sx(28)),
+            height=height,
+            bg=self._parent_bg,
+            highlightthickness=0,
+            bd=0,
+            relief="flat",
+            cursor=kwargs.pop("cursor", "hand2"),
+        )
+        self._trace_id = self._variable.trace_add("write", lambda *_args: self._draw())
+        self.bind("<Enter>", self._on_enter)
+        self.bind("<Leave>", self._on_leave)
+        self.bind("<Button-1>", self._show_menu)
+        self.bind("<Configure>", lambda _event: self._draw())
+        self._draw()
+
+    def destroy(self):
+        try:
+            self._variable.trace_remove("write", self._trace_id)
+        except tk.TclError:
+            pass
+        super().destroy()
+
+    def _rounded_rect(self, x1, y1, x2, y2, radius, **kwargs):
+        radius = min(radius, int((x2 - x1) / 2), int((y2 - y1) / 2))
+        self.create_rectangle(x1 + radius, y1, x2 - radius, y2, **kwargs)
+        self.create_rectangle(x1, y1 + radius, x2, y2 - radius, **kwargs)
+        self.create_arc(x1, y1, x1 + radius * 2, y1 + radius * 2, start=90, extent=90, style="pieslice", **kwargs)
+        self.create_arc(x2 - radius * 2, y1, x2, y1 + radius * 2, start=0, extent=90, style="pieslice", **kwargs)
+        self.create_arc(x2 - radius * 2, y2 - radius * 2, x2, y2, start=270, extent=90, style="pieslice", **kwargs)
+        self.create_arc(x1, y2 - radius * 2, x1 + radius * 2, y2, start=180, extent=90, style="pieslice", **kwargs)
+
+    def _draw(self):
+        self.delete("all")
+        width_px = max(1, self.winfo_width())
+        height_px = max(1, self.winfo_height())
+        radius = min(self._corner_radius, height_px // 3)
+        fill = self._active_bg if self._hover else self._bg
+        self._rounded_rect(1, 1, width_px - 2, height_px - 2, radius, fill=self._border, outline=self._border)
+        self._rounded_rect(2, 2, width_px - 3, height_px - 3, max(1, radius - 1), fill=fill, outline=fill)
+        self.create_text(
+            self._padx,
+            height_px / 2,
+            text=self._variable.get(),
+            font=self._font,
+            fill=self._fg,
+            anchor="w",
+        )
+        self.create_text(
+            width_px - self._padx,
+            height_px / 2,
+            text="▾",
+            font=self._font,
+            fill=self._fg,
+            anchor="e",
+        )
+
+    def _on_enter(self, _event):
+        self._hover = True
+        self._draw()
+
+    def _on_leave(self, _event):
+        self._hover = False
+        self._draw()
+
+    def set_values(self, values):
+        self._values = values
+
+    def _select(self, value):
+        self._variable.set(value)
+        if self._command:
+            self._command(value)
+
+    def _show_menu(self, event):
+        if not self._values:
+            return
+        menu = tk.Menu(
+            self,
+            tearoff=0,
+            bg=self._bg,
+            fg=self._fg,
+            activebackground=COLORS["primary_soft"],
+            activeforeground=COLORS["primary"],
+            relief="flat",
+            borderwidth=1,
+        )
+        for value in self._values:
+            menu.add_command(label=value, command=lambda selected=value: self._select(selected))
+        menu.tk_popup(event.x_root, event.y_root)
+
+class RoundedToggle(tk.Canvas):
+    def __init__(
+        self,
+        parent,
+        text,
+        variable,
+        command=None,
+        font=FONT_NORMAL,
+        width=MODE_BUTTON_WIDTH,
+        corner_radius=None,
+        **kwargs,
+    ):
+        self._parent_bg = parent.cget("bg") if "bg" in parent.keys() else COLORS["app_bg"]
+        self._text = text
+        self._variable = variable
+        self._command = command
+        self._font = font
+        self._corner_radius = corner_radius or sx(CONTROL_RADIUS)
+        self._hover = False
+
+        font_obj = tkfont.Font(font=self._font)
+        text_width = max(font_obj.measure(self._text), font_obj.measure("0") * width)
+        checked_width = font_obj.measure(f"✓ {self._text}")
+        height = max(sx(36), font_obj.metrics("linespace") + sx(12))
+        super().__init__(
+            parent,
+            width=max(text_width, checked_width) + sx(28),
+            height=height,
+            bg=self._parent_bg,
+            highlightthickness=0,
+            bd=0,
+            relief="flat",
+            cursor=kwargs.pop("cursor", "hand2"),
+        )
+        self.bind("<Enter>", self._on_enter)
+        self.bind("<Leave>", self._on_leave)
+        self.bind("<Button-1>", self._on_click)
+        self.bind("<Configure>", lambda _event: self._draw())
+        self._draw()
+
+    def _rounded_rect(self, x1, y1, x2, y2, radius, **kwargs):
+        radius = min(radius, int((x2 - x1) / 2), int((y2 - y1) / 2))
+        self.create_rectangle(x1 + radius, y1, x2 - radius, y2, **kwargs)
+        self.create_rectangle(x1, y1 + radius, x2, y2 - radius, **kwargs)
+        self.create_arc(x1, y1, x1 + radius * 2, y1 + radius * 2, start=90, extent=90, style="pieslice", **kwargs)
+        self.create_arc(x2 - radius * 2, y1, x2, y1 + radius * 2, start=0, extent=90, style="pieslice", **kwargs)
+        self.create_arc(x2 - radius * 2, y2 - radius * 2, x2, y2, start=270, extent=90, style="pieslice", **kwargs)
+        self.create_arc(x1, y2 - radius * 2, x1 + radius * 2, y2, start=180, extent=90, style="pieslice", **kwargs)
+
+    def _draw(self):
+        self.delete("all")
+        width_px = max(1, self.winfo_width())
+        height_px = max(1, self.winfo_height())
+        selected = self._variable.get()
+        border = COLORS["primary"] if selected else COLORS["border"]
+        fill = COLORS["primary"] if selected else (COLORS["option_hover"] if self._hover else COLORS["surface"])
+        fg = "#ffffff" if selected else COLORS["text"]
+        radius = min(self._corner_radius, height_px // 3)
+        self._rounded_rect(1, 1, width_px - 2, height_px - 2, radius, fill=border, outline=border)
+        self._rounded_rect(2, 2, width_px - 3, height_px - 3, max(1, radius - 1), fill=fill, outline=fill)
+        prefix = "✓ " if selected else ""
+        self.create_text(width_px / 2, height_px / 2, text=f"{prefix}{self._text}", font=self._font, fill=fg)
+
+    def _on_enter(self, _event):
+        self._hover = True
+        self._draw()
+
+    def _on_leave(self, _event):
+        self._hover = False
+        self._draw()
+
+    def _on_click(self, _event):
+        self._variable.set(not self._variable.get())
+        self._draw()
+        if self._command:
+            self._command()
+
+    def refresh(self):
+        self._draw()
+
 class QuizApp:
     def __init__(self, root):
         self.root = root
@@ -503,8 +792,16 @@ class QuizApp:
         self.current_file = ""
         self.selected_indices = []
         self.ans = ""
+        self.analysis_text = ""
+        self.current_theme = "default"
+        self.quiz_files = []
+        self.quiz_names = []
+        self.quiz_var = tk.StringVar(value="请选择题库")
         self.review_mode_var = tk.BooleanVar(value=False)
         self.auto_submit_var = tk.BooleanVar(value=False)
+        self.random_mode_var = tk.BooleanVar(value=False)
+        self.eye_mode_var = tk.BooleanVar(value=False)
+        self.night_mode_var = tk.BooleanVar(value=False)
         
         self.ensure_quiz_dir()
         self.setup_ui()
@@ -579,6 +876,18 @@ class QuizApp:
             return options
         return [option for part in opts_raw.split() if (option := self.strip_option_prefix(part))]
 
+    def get_row_analysis(self, row):
+        if len(row) <= ANALYSIS_COLUMN or self.is_blank(row[ANALYSIS_COLUMN]):
+            return ""
+        analysis = str(row[ANALYSIS_COLUMN]).strip()
+        return re.sub(r'^解析\s*[：:]\s*', '', analysis)
+
+    def ensure_analysis_column(self):
+        if self.current_df is None:
+            return
+        while self.current_df.shape[1] <= ANALYSIS_COLUMN:
+            self.current_df[self.current_df.shape[1]] = ""
+
     def validate_quiz_data(self, df, filename):
         if df.empty:
             raise ValueError("题库为空。")
@@ -609,10 +918,10 @@ class QuizApp:
     def make_button(self, parent, text, command=None, variant="secondary", width=BUTTON_WIDTH):
         styles = {
             "primary": (COLORS["primary"], "#ffffff", COLORS["primary_hover"]),
-            "secondary": (COLORS["primary_soft"], COLORS["primary"], "#e6c8a8"),
+            "secondary": (COLORS["primary_soft"], COLORS["primary"], COLORS["option_hover"]),
             "success": (COLORS["primary"], "#ffffff", COLORS["primary_hover"]),
-            "warning": (COLORS["warning_soft"], COLORS["warning"], "#ead4b6"),
-            "danger": (COLORS["danger_soft"], COLORS["danger"], "#e7c8bf"),
+            "warning": (COLORS["warning_soft"], COLORS["warning"], COLORS["option_hover"]),
+            "danger": (COLORS["danger_soft"], COLORS["danger"], COLORS["option_hover"]),
             "disabled": (COLORS["disabled"], "#ffffff", COLORS["disabled"]),
         }
         bg, fg, active_bg = styles[variant]
@@ -673,9 +982,102 @@ class QuizApp:
             if idx < len(self.opt_widgets):
                 self.opt_widgets[idx].config(bg=COLORS["success_soft"], highlightbackground=COLORS["success"])
 
+    def show_analysis(self):
+        if self.analysis_text:
+            self.analysis_box.config(text=f"解析：{self.analysis_text}")
+            self.analysis_box.pack(fill="x", padx=sx(PAGE_PADX), pady=(sx(6), sx(4)))
+        else:
+            self.analysis_box.pack_forget()
+
+    def view_analysis(self):
+        if self.current_df is None or len(self.current_df) == 0:
+            return
+        if self.analysis_text:
+            self.show_analysis()
+        else:
+            self.analysis_box.config(text="解析：暂无解析")
+            self.analysis_box.pack(fill="x", padx=sx(PAGE_PADX), pady=(sx(6), sx(4)))
+
+    def edit_analysis(self):
+        if self.current_df is None or len(self.current_df) == 0:
+            return
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("修改解析")
+        dialog.configure(bg=COLORS["app_bg"])
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.resizable(True, True)
+        dialog_w = max(sx(760), 760)
+        dialog_h = max(sx(420), 420)
+        dialog.minsize(max(sx(560), 560), max(sx(320), 320))
+        dialog.geometry(f"{dialog_w}x{dialog_h}+{self.root.winfo_rootx() + sx(140)}+{self.root.winfo_rooty() + sx(140)}")
+
+        text_frame = tk.Frame(dialog, bg=COLORS["app_bg"])
+        text_frame.pack(fill="both", expand=True, padx=sx(24), pady=(sx(18), sx(12)))
+        text_box = tk.Text(
+            text_frame,
+            height=7,
+            font=FONT_BODY,
+            bg=COLORS["surface"],
+            fg=COLORS["text"],
+            insertbackground=COLORS["text"],
+            relief="flat",
+            borderwidth=0,
+            wrap="word",
+            padx=sx(12),
+            pady=sx(10),
+        )
+        text_box.pack(fill="both", expand=True)
+        text_box.insert("1.0", self.analysis_text)
+        text_box.focus_set()
+
+        button_frame = tk.Frame(dialog, bg=COLORS["app_bg"])
+        button_frame.pack(fill="x", padx=sx(24), pady=(0, sx(18)))
+
+        def save_analysis():
+            self.ensure_analysis_column()
+            value = text_box.get("1.0", "end").strip()
+            self.current_df.iat[self.current_index, ANALYSIS_COLUMN] = value
+            output_path = self.get_file_path(self.current_file)
+            temp_path = f"{output_path}.tmp.xlsx"
+            try:
+                self.current_df.to_excel(temp_path, index=False, header=False)
+                os.replace(temp_path, output_path)
+            except PermissionError as exc:
+                if os.path.exists(temp_path):
+                    try:
+                        os.remove(temp_path)
+                    except OSError:
+                        pass
+                messagebox.showerror(
+                    "保存解析失败",
+                    f"无法写入解析：{self.current_file}\n\n请先关闭正在打开的 Excel/WPS 表格后再保存。\n\n{exc}",
+                    parent=dialog,
+                )
+                return
+            except Exception as exc:
+                if os.path.exists(temp_path):
+                    try:
+                        os.remove(temp_path)
+                    except OSError:
+                        pass
+                messagebox.showerror("保存解析失败", f"无法写入解析：{self.current_file}\n\n{exc}", parent=dialog)
+                return
+            self.analysis_text = self.get_row_analysis(self.current_df.iloc[self.current_index])
+            self.view_analysis()
+            self.label_res.config(text="解析已保存", fg=COLORS["success"])
+            dialog.destroy()
+
+        btn_cancel = self.make_button(button_frame, "取消", dialog.destroy, "secondary", width=8)
+        btn_cancel.pack(side="right", padx=(sx(10), 0))
+        btn_save = self.make_button(button_frame, "保存解析", save_analysis, "primary", width=10)
+        btn_save.pack(side="right")
+
     def on_review_mode_changed(self):
         if self.review_mode_var.get():
             self.auto_submit_var.set(False)
+        self.update_mode_toggles()
         if self.current_df is not None:
             self.show_question()
 
@@ -684,26 +1086,46 @@ class QuizApp:
             self.review_mode_var.set(False)
             if self.current_df is not None:
                 self.show_question()
+        self.update_mode_toggles()
 
-    def on_file_list_mousewheel(self, event):
-        self.file_list_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        return "break"
+    def on_random_mode_changed(self):
+        self.update_mode_toggles()
 
-    def on_file_list_configure(self, _event=None):
-        self.file_list_canvas.configure(scrollregion=self.file_list_canvas.bbox("all"))
+    def on_eye_mode_changed(self):
+        if self.eye_mode_var.get():
+            self.night_mode_var.set(False)
+            self.apply_theme("eye")
+        elif not self.night_mode_var.get():
+            self.apply_theme("default")
+        self.update_mode_toggles()
 
-    def on_file_canvas_configure(self, event):
-        self.file_list_canvas.itemconfigure(self.file_list_window, width=event.width)
+    def on_night_mode_changed(self):
+        if self.night_mode_var.get():
+            self.eye_mode_var.set(False)
+            self.apply_theme("night")
+        elif not self.eye_mode_var.get():
+            self.apply_theme("default")
+        self.update_mode_toggles()
 
-    def select_file_button(self, selected_button):
-        for button in self.file_buttons:
-            is_selected = button is selected_button
-            button.config(
-                bg=COLORS["file_item_selected"] if is_selected else COLORS["file_item"],
-                fg="#ffffff" if is_selected else COLORS["text"],
-                activebackground=COLORS["primary_hover"] if is_selected else COLORS["file_item_hover"],
-                activeforeground="#ffffff" if is_selected else COLORS["text"],
-            )
+    def update_mode_toggles(self):
+        for name in ("review_mode_toggle", "auto_submit_toggle", "random_mode_toggle", "eye_mode_toggle", "night_mode_toggle"):
+            widget = getattr(self, name, None)
+            if widget is not None:
+                widget.refresh()
+
+    def apply_theme(self, theme_name):
+        self.current_theme = theme_name
+        set_color_theme(theme_name)
+        self.root.configure(bg=COLORS["app_bg"])
+        for child in self.root.winfo_children():
+            child.destroy()
+        self.setup_ui()
+        self.refresh_file_list()
+        if self.current_file:
+            display_name = os.path.splitext(self.current_file)[0]
+            self.quiz_var.set(display_name)
+        if self.current_df is not None:
+            self.show_question()
 
     def on_option_enter(self, idx):
         if self.review_mode_var.get():
@@ -717,82 +1139,63 @@ class QuizApp:
         self.set_option_style(idx, selected=idx in self.selected_indices)
 
     def setup_ui(self):
-        # 左侧题库列表
-        self.left_frame = tk.Frame(self.root, width=sx(352), bg=COLORS["sidebar"])
-        self.left_frame.pack(side="left", fill="y")
-        self.left_frame.pack_propagate(False) 
+        self.main_frame = tk.Frame(self.root, bg=COLORS["app_bg"])
+        self.main_frame.pack(fill="both", expand=True)
 
-        self.left_header = tk.Frame(self.left_frame, height=sx(HEADER_HEIGHT), bg=COLORS["sidebar_header"])
-        self.left_header.pack(fill="x")
-        self.left_header.pack_propagate(False)
+        self.top_bar = tk.Frame(self.main_frame, height=sx(HEADER_HEIGHT), bg=COLORS["top_header"])
+        self.top_bar.pack(fill="x", pady=(0, sx(SECTION_GAP)))
+        self.top_bar.pack_propagate(False)
 
-        tk.Label(
-            self.left_header,
-            text="题库列表",
-            font=FONT_HEADER,
-            bg=COLORS["sidebar_header"],
-            fg=COLORS["text"],
-            anchor="w",
-        ).pack(side="left", fill="x", expand=True, padx=(sx(13), sx(10)), pady=0)
+        self.quiz_group = tk.Frame(self.top_bar, bg=COLORS["top_header"])
+        self.quiz_group.pack(side="left", padx=(sx(TOOLBAR_PADX), sx(GROUP_GAP)), pady=0)
 
         self.btn_refresh = self.make_button(
-            self.left_header,
+            self.quiz_group,
             "↻",
             self.refresh_file_list,
             "secondary",
             width=3,
         )
-        self.btn_refresh.pack(side="right", padx=(0, sx(16)), pady=0)
-        
-        self.file_list_frame = tk.Frame(self.left_frame, bg=COLORS["sidebar"])
-        self.file_list_frame.pack(fill="both", expand=True, padx=sx(13), pady=(0, sx(13)))
+        self.btn_refresh.pack(side="left", padx=(0, sx(GROUP_GAP)), pady=0)
 
-        self.file_list_canvas = tk.Canvas(
-            self.file_list_frame,
-            bg=COLORS["sidebar"],
-            highlightthickness=0,
-            bd=0,
-        )
-        self.file_scrollbar = tk.Scrollbar(
-            self.file_list_frame,
-            orient="vertical",
-            command=self.file_list_canvas.yview,
-            bg=COLORS["sidebar_header"],
-            activebackground=COLORS["sidebar_header"],
-            troughcolor=COLORS["sidebar"],
-            relief="flat",
-            borderwidth=0,
-        )
-        self.file_listbox = tk.Frame(self.file_list_canvas, bg=COLORS["sidebar"])
-        self.file_list_window = self.file_list_canvas.create_window((0, 0), window=self.file_listbox, anchor="nw")
-        self.file_list_canvas.configure(yscrollcommand=self.file_scrollbar.set)
-        self.file_list_canvas.pack(side="left", fill="both", expand=True)
-        self.file_scrollbar.pack(side="right", fill="y")
-        self.file_buttons = []
-        self.file_listbox.bind("<Configure>", self.on_file_list_configure)
-        self.file_list_canvas.bind("<Configure>", self.on_file_canvas_configure)
-        self.file_list_canvas.bind("<MouseWheel>", self.on_file_list_mousewheel)
-        self.file_listbox.bind("<MouseWheel>", self.on_file_list_mousewheel)
-        # 右侧主界面
-        self.right_frame = tk.Frame(self.root, bg=COLORS["app_bg"])
-        self.right_frame.pack(side="right", fill="both", expand=True)
+        tk.Label(
+            self.quiz_group,
+            text="题库",
+            font=FONT_SMALL,
+            bg=COLORS["top_header"],
+            fg=COLORS["muted"],
+        ).pack(side="left", padx=(0, sx(8)), pady=0)
 
-        self.top_bar = tk.Frame(self.right_frame, height=sx(HEADER_HEIGHT), bg=COLORS["top_header"])
-        self.top_bar.pack(fill="x", pady=(0, sx(10)))
-        self.top_bar.pack_propagate(False)
-        
+        self.quiz_combo = RoundedDropdown(
+            self.quiz_group,
+            variable=self.quiz_var,
+            values=self.quiz_names,
+            command=self.load_file,
+            width=18,
+            font=FONT_NORMAL,
+            bg=COLORS["surface"],
+            fg=COLORS["text"],
+            border=COLORS["border"],
+            activebackground=COLORS["option_hover"],
+            corner_radius=sx(CONTROL_RADIUS),
+        )
+        self.quiz_combo.pack(side="left", padx=0)
+
+        self.status_group = tk.Frame(self.top_bar, bg=COLORS["top_header"])
+        self.status_group.pack(side="left", padx=(0, sx(GROUP_GAP)), pady=0)
+
         self.info_label = tk.Label(
-            self.top_bar,
-            text="点击左侧选择题库",
+            self.status_group,
+            text="请选择题库",
             font=FONT_NORMAL,
             bg=COLORS["top_header"],
             fg=COLORS["muted"],
         )
-        self.info_label.pack(side="left", padx=sx(48), pady=0)
+        self.info_label.pack(side="left", padx=0, pady=0)
 
         # 跳转模块
         self.jump_frame = tk.Frame(self.top_bar, bg=COLORS["top_header"])
-        self.jump_frame.pack(side="right", padx=(0, sx(48)), pady=0)
+        self.jump_frame.pack(side="right", padx=(0, sx(TOOLBAR_PADX)), pady=0)
         tk.Label(
             self.jump_frame,
             text="跳转",
@@ -803,13 +1206,13 @@ class QuizApp:
         
         self.jump_entry = RoundedEntry(
             self.jump_frame,
-            width=7,
+            width=5,
             font=FONT_NORMAL,
             bg=COLORS["sidebar_alt"],
             fg=COLORS["text"],
             border=COLORS["border"],
             justify="center",
-            corner_radius=sx(12),
+            corner_radius=sx(CONTROL_RADIUS),
         )
         self.jump_entry.pack(side="left", padx=(sx(8), 0))
         self.jump_entry.bind("<Return>", self.jump_to_question)
@@ -817,85 +1220,81 @@ class QuizApp:
         # 动态错题集管理按钮
         self.btn_action = self.make_button(self.top_bar, "加入错题集", variant="warning", width=10)
         self.btn_action.config(font=FONT_NORMAL, height=1, padx=sx(2), pady=0)
-        self.btn_action.pack(side="right", padx=sx(18), pady=0)
+        self.btn_action.pack(side="right", padx=(0, sx(GROUP_GAP)), pady=0)
 
-        self.auto_submit_frame = tk.Frame(self.top_bar, bg=COLORS["top_header"])
-        self.auto_submit_frame.pack(side="right", padx=(0, sx(10)), pady=0)
-
-        tk.Label(
-            self.auto_submit_frame,
-            text="自动提交",
-            font=FONT_SMALL,
-            bg=COLORS["top_header"],
-            fg=COLORS["text"],
-        ).pack(side="left")
-
-        self.auto_submit_check = tk.Checkbutton(
-            self.auto_submit_frame,
-            text="",
-            variable=self.auto_submit_var,
-            command=self.on_auto_submit_changed,
-            font=FONT_SMALL,
-            bg=COLORS["top_header"],
-            fg=COLORS["text"],
-            activebackground=COLORS["top_header"],
-            activeforeground=COLORS["text"],
-            selectcolor=COLORS["surface"],
-            cursor="hand2",
-            relief="flat",
-            borderwidth=0,
+        self.mode_frame = tk.Frame(
+            self.main_frame,
+            bg=COLORS["app_bg"],
+            highlightthickness=0,
         )
-        self.auto_submit_check.pack(side="left", padx=(sx(4), 0), pady=0)
+        self.mode_frame.pack(fill="x", padx=sx(PAGE_PADX), pady=(0, sx(8)))
+        for col in range(5):
+            self.mode_frame.grid_columnconfigure(col, weight=1)
 
-        self.review_mode_frame = tk.Frame(self.top_bar, bg=COLORS["top_header"])
-        self.review_mode_frame.pack(side="right", padx=(0, sx(12)), pady=0)
-
-        tk.Label(
-            self.review_mode_frame,
-            text="背题功能",
-            font=FONT_SMALL,
-            bg=COLORS["top_header"],
-            fg=COLORS["text"],
-        ).pack(side="left")
-
-        self.review_mode_check = tk.Checkbutton(
-            self.review_mode_frame,
-            text="",
-            variable=self.review_mode_var,
-            command=self.on_review_mode_changed,
-            font=FONT_SMALL,
-            bg=COLORS["top_header"],
-            fg=COLORS["text"],
-            activebackground=COLORS["top_header"],
-            activeforeground=COLORS["text"],
-            selectcolor=COLORS["surface"],
-            cursor="hand2",
-            relief="flat",
-            borderwidth=0,
+        self.review_mode_toggle = RoundedToggle(
+            self.mode_frame,
+            "背题功能",
+            self.review_mode_var,
+            self.on_review_mode_changed,
         )
-        self.review_mode_check.pack(side="left", padx=(sx(4), 0), pady=0)
+        self.review_mode_toggle.grid(row=0, column=0, padx=sx(6), pady=sx(4))
+
+        self.auto_submit_toggle = RoundedToggle(
+            self.mode_frame,
+            "自动提交",
+            self.auto_submit_var,
+            self.on_auto_submit_changed,
+        )
+        self.auto_submit_toggle.grid(row=0, column=1, padx=sx(6), pady=sx(4))
+
+        self.random_mode_toggle = RoundedToggle(
+            self.mode_frame,
+            "随机刷题",
+            self.random_mode_var,
+            self.on_random_mode_changed,
+        )
+        self.random_mode_toggle.grid(row=0, column=2, padx=sx(6), pady=sx(4))
+
+        self.eye_mode_toggle = RoundedToggle(
+            self.mode_frame,
+            "护眼模式",
+            self.eye_mode_var,
+            self.on_eye_mode_changed,
+        )
+        self.eye_mode_toggle.grid(row=0, column=3, padx=sx(6), pady=sx(4))
+
+        self.night_mode_toggle = RoundedToggle(
+            self.mode_frame,
+            "夜间模式",
+            self.night_mode_var,
+            self.on_night_mode_changed,
+        )
+        self.night_mode_toggle.grid(row=0, column=4, padx=sx(6), pady=sx(4))
 
         # 题干显示
-        self.question_frame = tk.Frame(self.right_frame, bg=COLORS["app_bg"])
-        self.question_frame.pack(fill="x", padx=sx(48), pady=(0, sx(6)))
+        self.question_frame = tk.Frame(self.main_frame, bg=COLORS["app_bg"])
+        self.question_frame.pack(fill="x", padx=sx(PAGE_PADX), pady=(0, sx(8)))
 
-        self.label_q = tk.Label(
+        self.label_q = RoundedOption(
             self.question_frame,
             text="",
-            wraplength=sx(1280),
+            wraplength=sx(QUESTION_WRAP),
             font=FONT_BODY,
-            bg=COLORS["app_bg"],
+            bg=COLORS["surface"],
             fg=COLORS["text"],
             justify="left",
             anchor="nw",
-            padx=0,
-            pady=sx(5),
+            padx=sx(18),
+            pady=sx(12),
+            cursor="arrow",
+            highlightbackground=COLORS["border"],
+            corner_radius=sx(CARD_RADIUS),
         )
         self.label_q.pack(fill="x")
         
         # 选项容器
-        self.opt_frame = tk.Frame(self.right_frame, bg=COLORS["app_bg"])
-        self.opt_frame.pack(fill="both", expand=True, padx=sx(48))
+        self.opt_frame = tk.Frame(self.main_frame, bg=COLORS["app_bg"])
+        self.opt_frame.pack(fill="both", expand=True, padx=sx(PAGE_PADX))
         
         self.opt_widgets = []
         for i in range(8):
@@ -908,22 +1307,40 @@ class QuizApp:
                 relief="flat",
                 padx=sx(14),
                 pady=sx(8),
-                wraplength=sx(1260),
+                wraplength=sx(OPTION_WRAP),
                 justify="left",
                 anchor="w",
                 cursor="hand2",
                 highlightthickness=1,
                 highlightbackground=COLORS["border"],
-                corner_radius=sx(12),
+                corner_radius=sx(CARD_RADIUS),
             )
             l.bind("<Button-1>", lambda e, idx=i: self.on_click_option(idx))
             l.bind("<Enter>", lambda e, idx=i: self.on_option_enter(idx))
             l.bind("<Leave>", lambda e, idx=i: self.on_option_leave(idx))
             self.opt_widgets.append(l)
+
+        self.analysis_box = RoundedOption(
+            self.main_frame,
+            text="",
+            font=FONT_BODY,
+            bg=COLORS["surface"],
+            fg=COLORS["text"],
+            relief="flat",
+            padx=sx(18),
+            pady=sx(12),
+            wraplength=sx(OPTION_WRAP),
+            justify="left",
+            anchor="w",
+            cursor="arrow",
+            highlightthickness=1,
+            highlightbackground=COLORS["border"],
+            corner_radius=sx(CARD_RADIUS),
+        )
         
         # 反馈文本
         self.label_res = tk.Label(
-            self.right_frame,
+            self.main_frame,
             text="",
             font=FONT_BODY_BOLD,
             bg=COLORS["app_bg"],
@@ -933,33 +1350,36 @@ class QuizApp:
 
         # 底部控制栏
         self.bottom_frame = tk.Frame(
-            self.right_frame,
+            self.main_frame,
             bg=COLORS["app_bg"],
             highlightthickness=0,
         )
         self.bottom_frame.pack(side="bottom", fill="x", pady=(0, sx(13)))
         
-        self.bottom_frame.grid_columnconfigure(0, weight=1)
-        self.bottom_frame.grid_columnconfigure(1, weight=1)
-        self.bottom_frame.grid_columnconfigure(2, weight=1)
+        for col in range(5):
+            self.bottom_frame.grid_columnconfigure(col, weight=1)
 
         self.btn_prev = self.make_button(self.bottom_frame, "上一题", self.prev_question, "secondary")
-        self.btn_prev.config(pady=sx(7))
-        self.btn_prev.grid(row=0, column=0, padx=sx(58), pady=sx(5))
+        self.btn_prev.config(pady=sx(BUTTON_PADY))
+        self.btn_prev.grid(row=0, column=0, padx=sx(22), pady=sx(5))
+
+        self.btn_view_analysis = self.make_button(self.bottom_frame, "查看解析", self.view_analysis, "secondary")
+        self.btn_view_analysis.config(pady=sx(BUTTON_PADY))
+        self.btn_view_analysis.grid(row=0, column=1, padx=sx(22), pady=sx(5))
         
         self.btn_submit = self.make_button(self.bottom_frame, "确认提交", self.submit_answer, "disabled")
-        self.btn_submit.config(state="disabled", pady=sx(7))
-        self.btn_submit.grid(row=0, column=1, padx=sx(58), pady=sx(5))
+        self.btn_submit.config(state="disabled", pady=sx(BUTTON_PADY))
+        self.btn_submit.grid(row=0, column=2, padx=sx(22), pady=sx(5))
+
+        self.btn_edit_analysis = self.make_button(self.bottom_frame, "修改解析", self.edit_analysis, "secondary")
+        self.btn_edit_analysis.config(pady=sx(BUTTON_PADY))
+        self.btn_edit_analysis.grid(row=0, column=3, padx=sx(22), pady=sx(5))
         
         self.btn_next = self.make_button(self.bottom_frame, "下一题", self.next_question, "secondary")
-        self.btn_next.config(pady=sx(7))
-        self.btn_next.grid(row=0, column=2, padx=sx(58), pady=sx(5))
+        self.btn_next.config(pady=sx(BUTTON_PADY))
+        self.btn_next.grid(row=0, column=4, padx=sx(22), pady=sx(5))
 
     def refresh_file_list(self):
-        for widget in self.file_listbox.winfo_children():
-            widget.destroy()
-        self.file_buttons = []
-
         if not self.ensure_quiz_dir():
             return
             
@@ -968,40 +1388,28 @@ class QuizApp:
         except OSError as exc:
             self.show_error("读取题库目录失败", f"无法读取题库目录：\n{QUIZ_DIR}\n\n{exc}")
             return
-        
-        for index, f in enumerate(files):
-            display_name = os.path.splitext(f)[0]
-            button = RoundedButton(
-                self.file_listbox,
-                text=display_name,
-                command=lambda name=display_name: self.load_file(name),
-                font=FONT_NORMAL,
-                width=22,
-                height=1,
-                bg=COLORS["file_item"],
-                fg=COLORS["text"],
-                activebackground=COLORS["file_item_hover"],
-                activeforeground=COLORS["text"],
-                padx=sx(10),
-                pady=sx(4),
-                anchor="w",
-            )
-            button.pack(fill="x", pady=(sx(8) if index == 0 else 0, sx(6)))
-            button.bind("<MouseWheel>", self.on_file_list_mousewheel)
-            self.file_buttons.append(button)
-            if self.current_file == f:
-                self.select_file_button(button)
-        self.on_file_list_configure()
+
+        self.quiz_files = files
+        self.quiz_names = [os.path.splitext(f)[0] for f in files]
+        if hasattr(self, "quiz_combo"):
+            self.quiz_combo.set_values(self.quiz_names)
+
+        if self.current_file in files:
+            self.quiz_var.set(os.path.splitext(self.current_file)[0])
+        elif not files:
+            self.quiz_var.set("没有题库")
+            self.info_label.config(text="题库文件夹为空")
+        elif self.quiz_var.get() not in self.quiz_names:
+            self.quiz_var.set("请选择题库")
 
     def load_selected_file(self, event):
-        return
+        selected = self.quiz_var.get()
+        if selected in self.quiz_names:
+            self.load_file(selected)
 
     def load_file(self, filename):
-        for button in self.file_buttons:
-            if button.cget("text") == filename:
-                self.select_file_button(button)
-                break
         self.current_file = filename + ".xlsx"
+        self.quiz_var.set(filename)
         
         try:
             df = pd.read_excel(self.get_file_path(self.current_file), header=None)
@@ -1030,7 +1438,9 @@ class QuizApp:
         if self.current_df is None or len(self.current_df) == 0: return
         self.save_config()
         self.selected_indices = []
+        self.analysis_text = ""
         self.label_res.config(text="")
+        self.analysis_box.pack_forget()
         self.btn_submit.config(
             state="disabled",
             bg=COLORS["disabled"],
@@ -1045,6 +1455,7 @@ class QuizApp:
         opts_raw = "" if self.is_blank(row[1]) else str(row[1])
         raw_answer = str(row[2]).strip()
         self.ans = self.normalize_answer(raw_answer)
+        self.analysis_text = self.get_row_analysis(row)
         
         self.is_multi = "多选题" in q_text or "," in self.ans
         self.is_pd = self.ans in ["对", "错"]
@@ -1062,7 +1473,7 @@ class QuizApp:
                 text="移出错题集",
                 bg=COLORS["warning_soft"],
                 fg=COLORS["warning"],
-                activebackground="#ead4b6",
+                activebackground=COLORS["warning_soft"],
                 activeforeground=COLORS["warning"],
                 command=self.remove_from_wrong,
             )
@@ -1071,7 +1482,7 @@ class QuizApp:
                 text="加入错题集",
                 bg=COLORS["warning_soft"],
                 fg=COLORS["warning"],
-                activebackground="#ead4b6",
+                activebackground=COLORS["warning_soft"],
                 activeforeground=COLORS["warning"],
                 command=self.add_to_wrong_manually,
             )
@@ -1097,6 +1508,7 @@ class QuizApp:
 
         if self.review_mode_var.get():
             self.reveal_correct_answer()
+            self.show_analysis()
 
     def on_click_option(self, idx):
         if self.review_mode_var.get():
@@ -1148,6 +1560,7 @@ class QuizApp:
         else:
             self.label_res.config(text=f"✘ 错误。正确答案是: {self.ans}", fg=COLORS["danger"])
             self.mark_answer_options(user_ans_str, clean_correct)
+            self.show_analysis()
             self.save_wrong()
 
     # --- 新增功能：自动清理提示文字（仅清理操作提示，不清理对错判断） ---
@@ -1178,6 +1591,8 @@ class QuizApp:
             self.label_q.config(text="🎉 太棒了！该错题集的所有题目均已掌握！")
             self.info_label.config(text="进度：0/0")
             self.label_res.config(text="")
+            self.analysis_text = ""
+            self.analysis_box.pack_forget()
             for w in self.opt_widgets: w.pack_forget()
             self.btn_submit.config(state="disabled", bg=COLORS["disabled"])
             self.btn_action.pack_forget() 
@@ -1211,8 +1626,17 @@ class QuizApp:
                 self.show_error("保存错题失败", f"无法创建错题集：{wrong_file}\n\n{exc}")
 
     def next_question(self):
-        if self.current_df is not None and self.current_index < len(self.current_df) - 1:
-            self.current_index += 1; self.show_question()
+        if self.current_df is None or len(self.current_df) == 0:
+            return
+        if self.random_mode_var.get() and len(self.current_df) > 1:
+            next_index = random.randrange(len(self.current_df))
+            while next_index == self.current_index:
+                next_index = random.randrange(len(self.current_df))
+            self.current_index = next_index
+            self.show_question()
+        elif self.current_index < len(self.current_df) - 1:
+            self.current_index += 1
+            self.show_question()
 
     def prev_question(self):
         if self.current_index > 0:
