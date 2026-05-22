@@ -66,6 +66,14 @@ uv run python main.py
 - 顶部题库下拉、功能色块、答题区和底部导航区分明。
 - 主要按钮、题库下拉、题干和选项使用统一圆角样式，适合日常反复练习使用。
 
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/b839cf9a-1dc8-4dc9-9a90-98ae17fd9b36" width="70%" alt="界面截图" />
+</p>
+
+<p align="center">
+  <sub>选择判断刷题助手 v2.0 界面截图</sub>
+</p>
+
 ## 版本
 
 当前版本：`2.0`
